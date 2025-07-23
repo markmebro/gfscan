@@ -202,6 +202,35 @@ $tokenNeedles = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+		if (isset($_POST['deletePath'])) {
+				$fileToDelete = realpath($_POST['deletePath']);
+				header('Content-Type: application/json');
+
+				if (!$fileToDelete || !is_file($fileToDelete)) {
+						echo json_encode(['success' => false, 'message' => 'File tidak ditemukan atau path tidak valid.']);
+						exit;
+				}
+
+				if (!is_writable($fileToDelete)) {
+						echo json_encode(['success' => false, 'message' => 'File tidak bisa dihapus (tidak writable).']);
+						exit;
+				}
+
+				if (!isset($_POST['confirm'])) {
+						echo json_encode(['success' => false, 'message' => 'confirm']);
+						exit;
+				}
+
+				if (unlink($fileToDelete)) {
+						echo json_encode(['success' => true, 'message' => 'File berhasil dihapus.']);
+				} else {
+						echo json_encode(['success' => false, 'message' => 'Gagal menghapus file.']);
+				}
+				exit;
+		}
+
+
     if (isset($_POST['urls'])) {
         // Check multiple URLs status 200 with curl_multi
         $urls = json_decode($_POST['urls'], true);
@@ -435,6 +464,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div id="batchDurationCheck">Duration check (00:00:00)</div>
             </div>
         </div>
+
+				<hr>
+				<h4>🗑️ Hapus File</h4>
+				<div class="row g-2 mb-2">
+						<div class="col-md-10">
+								<input type="text" id="deletePath" class="form-control" placeholder="Contoh: /var/www/html/file.php">
+						</div>
+						<div class="col-md-2 d-grid">
+								<button class="btn btn-danger" onclick="deleteFile()">Hapus</button>
+						</div>
+				</div>
+				<div id="deleteStatus" class="text-muted fst-italic"></div>
+
     </div>
 
     <script>
@@ -604,6 +646,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             deepscanBtn.disabled = false;
             scanSpinner.classList.add('d-none');
         });
+
+		function deleteFile() {
+				const path = document.getElementById("deletePath").value.trim();
+				const status = document.getElementById("deleteStatus");
+
+				if (!path) {
+						status.textContent = "❌ Path kosong!";
+						return;
+				}
+
+				const formData = new URLSearchParams();
+				formData.append('deletePath', path);
+
+				// Cek terlebih dahulu apakah file valid dan ada
+				fetch('', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+						body: formData.toString()
+				})
+				.then(res => res.json())
+				.then(data => {
+						if (data.success) {
+								status.textContent = '✅ ' + data.message;
+						} else if (data.message === 'confirm') {
+								// Minta konfirmasi dari user
+								const confirmDelete = confirm("⚠️ File ditemukan:\n" + path + "\n\nApakah Anda yakin ingin menghapus file ini?");
+								if (confirmDelete) {
+										// Kirim ulang request dengan konfirmasi untuk delete
+										formData.append('confirm', '1');
+
+										fetch('', {
+												method: 'POST',
+												headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+												body: formData.toString()
+										})
+										.then(res => res.json())
+										.then(final => {
+												if (final.success) {
+														status.textContent = '✅ ' + final.message;
+												} else {
+														status.textContent = '❌ ' + final.message;
+												}
+										});
+								} else {
+										status.textContent = '❎ Penghapusan dibatalkan oleh pengguna.';
+								}
+						} else {
+								status.textContent = '❌ ' + data.message;
+						}
+				})
+				.catch(() => {
+						status.textContent = '❌ Terjadi kesalahan saat mengirim request.';
+				});
+		}
     </script>
 </body>
 
