@@ -230,107 +230,82 @@ function hasSuspiciousString($content)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (isset($_POST['deletePath'])) {
-			$fileToDelete = realpath($_POST['deletePath']);
-			header('Content-Type: application/json');
+        $fileToDelete = realpath($_POST['deletePath']);
+        header('Content-Type: application/json');
 
-			if (!$fileToDelete || !is_file($fileToDelete)) {
-					echo json_encode(['success' => false, 'message' => 'File tidak ditemukan atau path tidak valid.']);
-					exit;
-			}
+        if (!$fileToDelete || !is_file($fileToDelete)) {
+            echo json_encode(['success' => false, 'message' => 'File tidak ditemukan atau path tidak valid.']);
+            exit;
+        }
 
-			if (!is_writable($fileToDelete)) {
-					echo json_encode(['success' => false, 'message' => 'File tidak bisa dihapus (tidak writable).']);
-					exit;
-			}
+        if (!is_writable($fileToDelete)) {
+            echo json_encode(['success' => false, 'message' => 'File tidak bisa dihapus (tidak writable).']);
+            exit;
+        }
 
-			if (!isset($_POST['confirm'])) {
-					echo json_encode(['success' => false, 'message' => 'confirm']);
-					exit;
-			}
+        if (!isset($_POST['confirm'])) {
+            echo json_encode(['success' => false, 'message' => 'confirm']);
+            exit;
+        }
 
-			if (unlink($fileToDelete)) {
-					echo json_encode(['success' => true, 'message' => 'File berhasil dihapus.']);
-			} else {
-					echo json_encode(['success' => false, 'message' => 'Gagal menghapus file.']);
-			}
-			exit;
-		}
+        if (unlink($fileToDelete)) {
+            echo json_encode(['success' => true, 'message' => 'File berhasil dihapus.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Gagal menghapus file.']);
+        }
+        exit;
+    }
 
 
     if (isset($_POST['urls'])) {
-			// Check multiple URLs status 200 with curl_multi
-			$urls = json_decode($_POST['urls'], true);
-			$multiHandle = curl_multi_init();
-			$curlHandles = [];
-			$results = [];
+        // Check multiple URLs status 200 with curl_multi
+        $urls = json_decode($_POST['urls'], true);
+        $multiHandle = curl_multi_init();
+        $curlHandles = [];
+        $results = [];
 
-			foreach ($urls as $i => $url) {
-					if (!preg_match('~^https?://~i', $url)) $url = "http://$url";
-					$ch = curl_init();
-					curl_setopt_array($ch, [
-							CURLOPT_URL => $url,
-							CURLOPT_RETURNTRANSFER => true,
-							CURLOPT_TIMEOUT => 10,
-							CURLOPT_FOLLOWLOCATION => true,
-							CURLOPT_USERAGENT => 'Mozilla/5.0',
-							CURLOPT_NOBODY => true,
-					]);
-					curl_multi_add_handle($multiHandle, $ch);
-					$curlHandles[$i] = $ch;
-			}
+        foreach ($urls as $i => $url) {
+            if (!preg_match('~^https?://~i', $url)) $url = "http://$url";
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT => 'Mozilla/5.0',
+                CURLOPT_NOBODY => true,
+            ]);
+            curl_multi_add_handle($multiHandle, $ch);
+            $curlHandles[$i] = $ch;
+        }
 
-			$running = null;
-			do {
-					curl_multi_exec($multiHandle, $running);
-					curl_multi_select($multiHandle);
-			} while ($running > 0);
+        $running = null;
+        do {
+            curl_multi_exec($multiHandle, $running);
+            curl_multi_select($multiHandle);
+        } while ($running > 0);
 
-			foreach ($curlHandles as $i => $ch) {
-					$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-					if ($httpCode === 200) {
-							$results[] = $urls[$i];
-					}
-					curl_multi_remove_handle($multiHandle, $ch);
-					curl_close($ch);
-			}
+        foreach ($curlHandles as $i => $ch) {
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($httpCode === 200) {
+                $results[] = $urls[$i];
+            }
+            curl_multi_remove_handle($multiHandle, $ch);
+            curl_close($ch);
+        }
 
-			curl_multi_close($multiHandle);
+        curl_multi_close($multiHandle);
 
-			header('Content-Type: application/json');
-			echo json_encode([
-					'totalScanned' => count($urls),
-					'totalActive' => count($results),
-					'activeUrls' => $results,
-			]);
-			exit;
+        header('Content-Type: application/json');
+        echo json_encode([
+            'totalScanned' => count($urls),
+            'totalActive' => count($results),
+            'activeUrls' => $results,
+        ]);
+        exit;
     }
 
-    // Deep check route
-    if (isset($_POST['deepCheckUrl'])) {
-			$url = $_POST['deepCheckUrl'];
-			if (!preg_match('~^https?://~i', $url)) $url = "http://$url";
-
-			$ch = curl_init();
-			curl_setopt_array($ch, [
-					CURLOPT_URL => $url,
-					CURLOPT_RETURNTRANSFER => true,
-					CURLOPT_TIMEOUT => 15,
-					CURLOPT_FOLLOWLOCATION => true,
-					CURLOPT_USERAGENT => 'Mozilla/5.0',
-			]);
-			$body = curl_exec($ch);
-			$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-			curl_close($ch);
-
-			header('Content-Type: application/json');
-			echo json_encode([
-					'url' => $url,
-					'hasContent' => trim($body) !== '' && $status === 200,
-			]);
-			exit;
-    }
-
-    // Deep Check 3: keyword match
+    // Deep Check + Deep Scan keyword combined
     if (isset($_POST['deepCheckUrl'])) {
         $url = $_POST['deepCheckUrl'];
         if (!preg_match('~^https?://~i', $url)) $url = "http://$url";
@@ -347,7 +322,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        $keywords = ['upload', 'login', 'password', 'input', 'IP', 'serverIP', 'php', 'sql', 'choose a file', 'dumper', 'type="submit"', "type='submit'", 'form', 'button'];
+        // Jika hanya ingin tahu apakah URL aktif dan ada konten
+        if (!isset($_POST['checkKeyword'])) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'url' => $url,
+                'hasContent' => trim($body) !== '' && $status === 200,
+            ]);
+            exit;
+        }
+
+        // Jika ingin tahu apakah keyword mencurigakan ditemukan
+        $keywords = ['upload', 'login', 'password', 'input', 'IP', 'serverIP', 'php', 'sql', 'choose a file', 'dumper', 'submit', 'form', 'button'];
         $found = false;
 
         foreach ($keywords as $word) {
@@ -429,19 +415,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = getSortedByExtension($path, $ext);
             $fileWritable = sortByLastModified($result['file_writable']);
             foreach ($fileWritable as $file) {
-								$filePath = str_replace('\\', '/', $file);
-								$tokens = getFileTokens($filePath);
-								$cmp = compareTokens($tokenNeedles, $tokens);
+                $filePath = str_replace('\\', '/', $file);
+                $tokens = getFileTokens($filePath);
+                $cmp = compareTokens($tokenNeedles, $tokens);
 
-								$content = @file_get_contents($filePath, false, null, 0, 10000); // baca 10KB awal saja
-								$regexHits = hasSuspiciousString($content);
+                $content = @file_get_contents($filePath, false, null, 0, 10000); // baca 10KB awal saja
+                $regexHits = hasSuspiciousString($content);
 
-								if (!empty($cmp) || !empty($regexHits)) {
-										$matches = array_merge($cmp, $regexHits);
-										$output .= "$filePath (" . implode(', ', array_unique($matches)) . ')' . PHP_EOL;
-								}
-						}
-        		endif;
+                if (!empty($cmp) || !empty($regexHits)) {
+                    $matches = array_merge($cmp, $regexHits);
+                    $output .= "$filePath (" . implode(', ', array_unique($matches)) . ')' . PHP_EOL;
+                }
+            }
+        endif;
         ?>
 
         <div class="row g-2">
@@ -496,20 +482,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div id="batchDurationCheck">Duration check (00:00:00)</div>
             </div>
         </div>
-				<hr>
-				<h4>🗑️ Hapus File</h4>
-				<div class="row g-2 mb-2">
-						<div class="col-md-10">
-								<input type="text" id="deletePath" class="form-control" placeholder="Contoh: /var/www/html/file.php">
-						</div>
-						<div class="col-md-2 d-grid">
-								<button class="btn btn-danger" onclick="deleteFile()">Hapus</button>
-						</div>
-				</div>
-				<div id="deleteStatus" class="text-muted fst-italic"></div>
-
-
-
+        <hr>
+        <h4>🗑️ Hapus File</h4>
+        <div class="row g-2 mb-2">
+            <div class="col-md-10">
+                <input type="text" id="deletePath" class="form-control" placeholder="Contoh: /var/www/html/file.php">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button class="btn btn-danger" onclick="deleteFile()">Hapus</button>
+            </div>
+        </div>
+        <div id="deleteStatus" class="text-muted fst-italic"></div>
     </div>
 
     <script>
@@ -521,230 +504,117 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         function replaceInTextarea() {
-            const find = document.getElementById("findText").value;
-            const replace = document.getElementById("replaceText").value;
-            const textarea = document.getElementById("result");
+            let find = document.getElementById("findText").value;
+            let replace = document.getElementById("replaceText").value;
+            let textarea = document.getElementById("result");
+            if (!find) {
+                alert('Find text tidak boleh kosong');
+                return;
+            }
+            let content = textarea.value;
+            let regex = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+            textarea.value = content.replace(regex, replace);
+        }
 
-            if (find === "") {
-                alert("Input 'Find' tidak boleh kosong.");
+        function deleteFile() {
+            let path = document.getElementById("deletePath").value.trim();
+            if (!path) {
+                alert('Path kosong!');
+                return;
+            }
+            if (!confirm(`Apakah yakin ingin menghapus file:\n${path}?`)) return;
+
+            fetch('', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({
+                    'deletePath': path,
+                    'confirm': 'yes'
+                })
+            }).then(res => res.json())
+                .then(data => {
+                    document.getElementById('deleteStatus').textContent = data.message;
+                })
+                .catch(e => {
+                    document.getElementById('deleteStatus').textContent = 'Error: ' + e.message;
+                });
+        }
+
+        // Deep Check (cek URL satu per satu untuk keyword + status 200)
+        document.getElementById('deepcheckBtn').addEventListener('click', async () => {
+            const textarea = document.getElementById('result');
+            const urls = textarea.value.trim().split('\n').filter(l => l.trim());
+            if (urls.length === 0) {
+                alert('Textarea kosong');
+                return;
+            }
+            document.getElementById('checkSpinner').classList.remove('d-none');
+            let result2 = document.getElementById('result2');
+            result2.value = '';
+            let foundUrls = [];
+
+            for (let i = 0; i < urls.length; i++) {
+                const url = urls[i].trim();
+                try {
+                    const resp = await fetch('', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                        body: new URLSearchParams({
+                            'deepCheckUrl': url,
+                            'checkKeyword': '1'
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.matched) {
+                        foundUrls.push(data.url);
+                        result2.value += data.url + '\n';
+                    }
+                } catch {
+                    // ignore errors
+                }
+            }
+
+            document.getElementById('checkSpinner').classList.add('d-none');
+            if (foundUrls.length === 0) {
+                result2.value = '(No matched URLs)';
+            }
+            document.getElementById('resultBox').classList.remove('d-none');
+        });
+
+        // Deep Scan (cek status 200 URL dengan curl_multi di backend)
+        document.getElementById('deepscanBtn').addEventListener('click', async () => {
+            const textarea = document.getElementById('result');
+            const urls = textarea.value.trim().split('\n').filter(l => l.trim());
+            if (urls.length === 0) {
+                alert('Textarea kosong');
                 return;
             }
 
-            const regex = new RegExp(find, "g");
-            textarea.value = textarea.value.replace(regex, replace);
-        }
-
-        document.addEventListener("DOMContentLoaded", function () {
-            const domain = window.location.origin + "/";
-            document.getElementById("replaceText").value = domain;
-        });
-
-        function formatTime(seconds) {
-            const hrs = String(Math.floor(seconds / 3600)).padStart(2, '0');
-            const mins = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-            const secs = String(seconds % 60).padStart(2, '0');
-            return `${hrs}:${mins}:${secs}`;
-        }
-
-        async function processUrlsInBatches(urls, handlerFn, concurrency = 5) {
-            let results = [];
-            let active = 0;
-            let index = 0;
-            let startTime = Date.now();
-
-            return new Promise((resolve) => {
-                function next() {
-                    if (index >= urls.length && active === 0) {
-                        resolve(results);
-                        return;
-                    }
-                    while (active < concurrency && index < urls.length) {
-                        const url = urls[index++];
-                        active++;
-
-                        handlerFn(url).then(result => {
-                            results.push(result);
-                        }).catch(() => {
-                            results.push(false);
-                        }).finally(() => {
-                            active--;
-                            // Update UI progress
-                            document.getElementById('batchTotalChecking').textContent = `Total checking (${results.length}/${urls.length})`;
-
-                            // Estimasi waktu
-                            const elapsed = (Date.now() - startTime) / 1000;
-                            const avgPerItem = results.length ? elapsed / results.length : 0;
-                            const remaining = avgPerItem * (urls.length - results.length);
-                            document.getElementById('batchEstimatingTime').textContent = `Estimating time (${formatTime(Math.round(remaining))})`;
-
-                            // Duration check
-                            document.getElementById('batchDurationCheck').textContent = `Duration check (${formatTime(Math.round(elapsed))})`;
-
-                            next();
-                        });
-                    }
-                }
-                next();
-            });
-        }
-
-        const deepcheckBtn = document.getElementById('deepcheckBtn');
-        const deepscanBtn = document.getElementById('deepscanBtn');
-        const resultArea = document.getElementById('result2');
-        const resultBox = document.getElementById('resultBox');
-        const stats = document.getElementById('stats');
-        const checkSpinner = document.getElementById('checkSpinner');
-        const scanSpinner = document.getElementById('scanSpinner');
-
-        deepcheckBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            let input = document.getElementById('result').value.trim();
-            if (!input) return alert('Input kosong');
-            let urls = input.split('\n').map(u => u.trim()).filter(Boolean);
-            resultArea.value = '';
-            resultBox.classList.remove('d-none');
-            stats.style.display = 'none';
-
-            deepcheckBtn.disabled = true;
-            checkSpinner.classList.remove('d-none');
-
-            async function checkUrl(url) {
-                const formData = new URLSearchParams();
-                formData.append('deepCheckUrl', url);
-
-                try {
-                    const res = await fetch('', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: formData.toString()
-                    });
-                    const data = await res.json();
-                    if (data.hasContent) {
-                        resultArea.value += data.url + '\n';
-                        resultArea.scrollTop = resultArea.scrollHeight;
-                    }
-                    return data.hasContent;
-                } catch {
-                    return false;
-                }
-            }
-
-            const results = await processUrlsInBatches(urls, checkUrl, 5);
-
+            document.getElementById('scanSpinner').classList.remove('d-none');
+            document.getElementById('resultBox').classList.add('d-none');
+            document.getElementById('stats').style.display = 'block';
             document.getElementById('totalScanned').textContent = urls.length;
-            document.getElementById('totalActive').textContent = results.filter(r => r).length;
-            stats.style.display = 'block';
+            document.getElementById('totalActive').textContent = 0;
 
-            deepcheckBtn.disabled = false;
-            checkSpinner.classList.add('d-none');
-        });
-
-        deepscanBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            let input = resultArea.value.trim();
-            // if (!input) return alert('Input kosong');
-
-						// Jika input kosong, coba ambil dari elemen dengan id "result"
-						if (!input) {
-								input = document.getElementById('result').value.trim();
-								// Jika masih kosong, tampilkan alert
-								if (!input) {
-										alert('Input kosong');
-										return;
-								}
-						}
-            let urls = input.split('\n').map(u => u.trim()).filter(Boolean);
-            resultArea.value = '';
-            resultBox.classList.remove('d-none');
-
-            deepscanBtn.disabled = true;
-            scanSpinner.classList.remove('d-none');
-
-            async function scanUrl(url) {
-                const formData = new URLSearchParams();
-                formData.append('deepCheckUrl', url);
-
-                try {
-                    const res = await fetch('', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: formData.toString()
-                    });
-                    const data = await res.json();
-                    if (data.matched) {
-                        resultArea.value += data.url + '\n';
-                        resultArea.scrollTop = resultArea.scrollHeight;
-                    }
-                    return data.matched;
-                } catch {
-                    return false;
-                }
+            try {
+                const resp = await fetch('', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: new URLSearchParams({'urls': JSON.stringify(urls)})
+                });
+                const data = await resp.json();
+                document.getElementById('totalActive').textContent = data.totalActive;
+                let result2 = document.getElementById('result2');
+                result2.value = data.activeUrls.join('\n');
+                document.getElementById('resultBox').classList.remove('d-none');
+            } catch (e) {
+                alert('Error saat Deep Scan: ' + e.message);
             }
-
-            const results = await processUrlsInBatches(urls, scanUrl, 5);
-
-            document.getElementById('totalScanned').textContent = urls.length;
-            document.getElementById('totalActive').textContent = results.filter(r => r).length;
-
-            deepscanBtn.disabled = false;
-            scanSpinner.classList.add('d-none');
+            document.getElementById('scanSpinner').classList.add('d-none');
         });
-
-		function deleteFile() {
-				const path = document.getElementById("deletePath").value.trim();
-				const status = document.getElementById("deleteStatus");
-
-				if (!path) {
-						status.textContent = "❌ Path kosong!";
-						return;
-				}
-
-				const formData = new URLSearchParams();
-				formData.append('deletePath', path);
-
-				// Cek terlebih dahulu apakah file valid dan ada
-				fetch('', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-						body: formData.toString()
-				})
-				.then(res => res.json())
-				.then(data => {
-						if (data.success) {
-								status.textContent = '✅ ' + data.message;
-						} else if (data.message === 'confirm') {
-								// Minta konfirmasi dari user
-								const confirmDelete = confirm("⚠️ File ditemukan:\n" + path + "\n\nApakah Anda yakin ingin menghapus file ini?");
-								if (confirmDelete) {
-										// Kirim ulang request dengan konfirmasi untuk delete
-										formData.append('confirm', '1');
-
-										fetch('', {
-												method: 'POST',
-												headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-												body: formData.toString()
-										})
-										.then(res => res.json())
-										.then(final => {
-												if (final.success) {
-														status.textContent = '✅ ' + final.message;
-												} else {
-														status.textContent = '❌ ' + final.message;
-												}
-										});
-								} else {
-										status.textContent = '❎ Penghapusan dibatalkan oleh pengguna.';
-								}
-						} else {
-								status.textContent = '❌ ' + data.message;
-						}
-				})
-				.catch(() => {
-						status.textContent = '❌ Terjadi kesalahan saat mengirim request.';
-				});
-		}
     </script>
-
 </body>
 
 </html>
