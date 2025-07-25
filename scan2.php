@@ -321,7 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        $keywords = ['upload', 'login', 'password', 'input', 'IP', 'serverIP', 'php', 'sql', 'choose a file', 'dumper', 'type="submit"', "type='submit'", 'form', 'button'];
+        $keywords = ['upload', 'login', 'password', 'input', 'IP', 'serverIP', 'php', 'sql', 'choose a file', 'dumper', 'submit', 'button', 'exec','type="submit"', "type='submit'", 'form', 'button'];
         $found = false;
 
         foreach ($keywords as $word) {
