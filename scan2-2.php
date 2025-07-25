@@ -438,7 +438,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 								if (!empty($cmp) || !empty($regexHits)) {
 										$matches = array_merge($cmp, $regexHits);
-										$output .= "[SUSPICIOUS] $filePath (" . implode(', ', array_unique($matches)) . ')' . PHP_EOL;
+										$output .= "$filePath (" . implode(', ', array_unique($matches)) . ')' . PHP_EOL;
 								}
 						}
         		endif;
