@@ -609,7 +609,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         deepscanBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             let input = resultArea.value.trim();
-            if (!input) return alert('Input kosong');
+            // if (!input) return alert('Input kosong');
+
+						// Jika input kosong, coba ambil dari elemen dengan id "result"
+						if (!input) {
+								input = document.getElementById('result').value.trim();
+								// Jika masih kosong, tampilkan alert
+								if (!input) {
+										alert('Input kosong');
+										return;
+								}
+						}
             let urls = input.split('\n').map(u => u.trim()).filter(Boolean);
             resultArea.value = '';
             resultBox.classList.remove('d-none');
