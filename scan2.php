@@ -10,6 +10,10 @@ ini_set('memory_limit', '-1');
 ini_set('max_execution_time', $limit);
 set_time_limit($limit);
 
+$skip_ext = ['jpg', 'png', 'gif', 'svg', 'css', 'js', 'json', 'xml', 'map', 'woff', 'ttf', 'eot', 'mp4', 'zip'];
+$max_file_size = 1 * 1024 * 1024; // 1MB
+
+
 function recursiveScan($directory, &$entries_array = array())
 {
     $handle = @opendir($directory);
@@ -51,12 +55,23 @@ function getSortedByTime($path)
 
 function getSortedByExtension($path, $ext)
 {
+    global $skip_ext, $max_file_size;
+
     $result = getSortedByTime($path);
     $fileWritable = $result['file_writable'];
     $sortedWritableFile = [];
 
     foreach ($fileWritable as $entry) {
         $extension = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+
+        if (in_array($extension, $skip_ext)) {
+            continue; // Skip ekstensi tidak diinginkan
+        }
+
+        if (filesize($entry) > $max_file_size) {
+            continue; // Lewati file lebih besar dari 1MB
+        }
+
         if (in_array($extension, $ext)) {
             $sortedWritableFile[] = $entry;
         }
@@ -67,6 +82,7 @@ function getSortedByExtension($path, $ext)
         'file_not_writable' => []
     ];
 }
+
 
 function getFileTokens($filename)
 {
@@ -272,8 +288,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Content-Type: application/json');
         echo json_encode([
-            'totalScanned' => count($urls),
-            'totalActive' => count($results),
+            'totalActive' => count($urls),
+            'totalSuspect' => count($results),
             'activeUrls' => $results,
         ]);
         exit;
@@ -321,7 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        $keywords = ['upload', 'login', 'password', 'input', 'IP', 'serverIP', 'php', 'sql', 'choose a file', 'dumper', 'submit', 'button', 'exec','type="submit"', "type='submit'", 'form', 'button'];
+        $keywords = ['upload', 'login', 'password', 'input', 'IP', 'serverIP', 'php', 'sql', 'choose a file', 'dumper', 'submit', 'form', 'button'];
         $found = false;
 
         foreach ($keywords as $word) {
@@ -352,6 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         body {
             font-family: 'Ubuntu Mono', monospace;
             background-color: #f8f9fa;
+						font-size: 10px !important;
         }
 
         textarea {
@@ -396,20 +413,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </form>
 
-        <?php if (isset($_POST['submit'])):
-            $output = "";
-            $path = $_POST['dir'];
-            $result = getSortedByExtension($path, $ext);
-            $fileWritable = sortByLastModified($result['file_writable']);
-            foreach ($fileWritable as $file) {
-                $filePath = str_replace('\\', '/', $file);
-                $tokens = getFileTokens($filePath);
-                $cmp = compareTokens($tokenNeedles, $tokens);
-                if (!empty($cmp)) {
-                    $output .= $filePath . ' (' . implode(', ', $cmp) . ')' . PHP_EOL;
+        <?php 
+            if (isset($_POST['submit'])):
+                $output = "";
+                $path = $_POST['dir'];
+                $result = getSortedByExtension($path, $ext);
+                $fileWritable = sortByLastModified($result['file_writable']);
+                foreach ($fileWritable as $file) {
+                    $filePath = str_replace('\\', '/', $file);
+                    $tokens = getFileTokens($filePath);
+                    $cmp = compareTokens($tokenNeedles, $tokens);
+                    if (!empty($cmp)) {
+                        $output .= $filePath . ' (' . implode(', ', $cmp) . ')' . PHP_EOL;
+                    }
                 }
-            }
-        endif;
+            endif;
         ?>
 
         <div class="row g-2">
@@ -447,17 +465,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     Deep Scan
                     <span id="scanSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
                 </button>
+                <button type="button" class="btn btn-warning" onclick="replaceInTextarea2()">
+                    Dir ➤
+                </button>
+
             </div>
         </form>
 
         <div id="stats" class="mt-3" style="display:none;">
-            <p><strong>Total URLs scanned:</strong> <span id="totalScanned">0</span></p>
-            <p><strong>Total URLs active (200):</strong> <span id="totalActive">0</span></p>
+            <p><strong>Total URLs active:</strong> <span id="totalActive">0</span></p>
+            <p><strong>Total URLs suspected:</strong> <span id="totalSuspect">0</span></p>
         </div>
 
         <div id="resultBox" class="mt-3 d-none">
             <h5>✔️ Active URLs</h5>
-            <textarea class="form-control" id="result2" rows="10" style="height: 200px;"></textarea>
+						<div class="mb-3">
+							<div class="row align-items-center">
+								<div class="col-md-6">
+            			<textarea class="form-control" id="result2" rows="10" style="height: 200px;"></textarea>
+								</div>
+								<div class="col-md-6">
+            			<textarea class="form-control" id="dir" rows="10" style="height: 200px;"></textarea>
+								</div>
+							</div>
+						</div>
             <div id="batchStatus" class="mt-2 fst-italic text-muted d-flex justify-content-between">
                 <div id="batchTotalChecking">Total checking (0/0)</div>
                 <div id="batchEstimatingTime">Estimating time (00:00:00)</div>
@@ -487,6 +518,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             textarea.value = processed.join('\n');
         }
 
+				//dir to url
         function replaceInTextarea() {
             const find = document.getElementById("findText").value;
             const replace = document.getElementById("replaceText").value;
@@ -500,6 +532,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const regex = new RegExp(find, "g");
             textarea.value = textarea.value.replace(regex, replace);
         }
+
+				function replaceInTextarea2() {
+						const find = document.getElementById("replaceText").value;   // dari kolom "Replace"
+						const replace = document.getElementById("findText").value;   // ke kolom "Find"
+						const fromTextarea = document.getElementById("result2");     // ambil dari textarea result2
+						const toTextarea = document.getElementById("dir");           // tempel ke textarea dir
+
+						if (!find) {
+								alert("Input 'Replace' (yang mau dicari) tidak boleh kosong.");
+								return;
+						}
+
+						// Salin isi, dan lakukan replace
+						let newText = fromTextarea.value.replace(new RegExp(find, "g"), replace);
+						toTextarea.value = newText;
+				}
+
 
         document.addEventListener("DOMContentLoaded", function () {
             const domain = window.location.origin + "/";
@@ -598,8 +647,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             const results = await processUrlsInBatches(urls, checkUrl, 5);
 
-            document.getElementById('totalScanned').textContent = urls.length;
-            document.getElementById('totalActive').textContent = results.filter(r => r).length;
+            document.getElementById('totalActive').textContent = urls.length;
+            document.getElementById('totalSuspect').textContent = results.filter(r => r).length;
             stats.style.display = 'block';
 
             deepcheckBtn.disabled = false;
@@ -650,8 +699,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             const results = await processUrlsInBatches(urls, scanUrl, 5);
 
-            document.getElementById('totalScanned').textContent = urls.length;
-            document.getElementById('totalActive').textContent = results.filter(r => r).length;
+            document.getElementById('totalActive').textContent = urls.length;
+            document.getElementById('totalSuspect').textContent = results.filter(r => r).length;
 
             deepscanBtn.disabled = false;
             scanSpinner.classList.add('d-none');
